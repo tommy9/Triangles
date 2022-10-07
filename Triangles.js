@@ -4,11 +4,11 @@ let triangles;
 let solver;
 let history;
 let iteration;
-const MAX_ITERATION = 5; //1000;
+const MAX_ITERATION = 1500; //1000;
 const NSHAPES = 50;
 const NPOPULATION = 100; //100
 const IMG_SIZE = 200;
-const RAND_SEED = 99;
+const RAND_SEED = 999;
 let targetImg;
 let canvasPixels;
 let diffImg;
@@ -33,20 +33,21 @@ function setup() {
 function draw() {
   let fitness_list, result, solutions;
   if (iteration < MAX_ITERATION) {
-      solutions = tf.tidy(() => {return solver.ask();});
-      fitness_list = [];
-      for (let i = 0; i < solver.popsize; i += 1) {
-          fitness_list[i] = tf.tidy(() => {return fit_func(solutions.unstack()[i]);});
-      }
-      result = tf.tidy(() => {return solver.tell(fitness_list);});
+      // solutions = tf.tidy(() => {return solver.ask();});
+      // fitness_list = [];
+      // for (let i = 0; i < solver.popsize; i += 1) {
+      //     fitness_list[i] = tf.tidy(() => {return fit_func(solutions.unstack()[i]);});
+      // }
+      // result = tf.tidy(() => {return solver.tell(fitness_list);});
       console.log('Tell MB used: ' + tf.memory().numBytesInGPU/1024/1024 + ' for numTensors: ' + tf.memory().numTensors);
-      history.push(result[1]);
-      if ((((iteration + 1) % 1) === 0)) { //100
-          console.log("fitness at iteration", (iteration + 1), ": ", result[1]);
-      }
-      //print best
-      tf.tidy(() => {return fit_func(result[0]);});
-      solutions.dispose();
+      // history.push(result[1]);
+      // if ((((iteration + 1) % 1) === 0)) { //100
+      //     console.log("fitness at iteration", (iteration + 1), ": ", result[1]);
+      // }
+      // //print best
+      // tf.tidy(() => {return fit_func(result[0]);});
+      // solutions.dispose();
+      tf.tidy(() => {return solver.iterate();});
       iteration += 1;
       if (iteration == MAX_ITERATION) {
         saveCanvas('final image', 'png');
@@ -213,10 +214,25 @@ class PGPE{
     this.seed = RAND_SEED;
   }
 
-  rms_stdev() {
-    //var sigma = this.sigma;
-    return tf.mean(tf.sqrt(tf.mul(this.sigma, this.sigma)));
+  iterate() {
+    let fitness_list, result, solutions;
+    solutions = solver.ask(); //tf.tidy(() => {return solver.ask();});
+    fitness_list = [];
+    for (let i = 0; i < solver.popsize; i += 1) {
+        fitness_list[i] = fit_func(solutions.unstack()[i]); //tf.tidy(() => {return fit_func(solutions.unstack()[i]);});
+    }
+    result = solver.tell(fitness_list); //tf.tidy(() => {return solver.tell(fitness_list);});
+    //console.log('Tell MB used: ' + tf.memory().numBytesInGPU/1024/1024 + ' for numTensors: ' + tf.memory().numTensors);
+    history.push(result[1]);
+    if ((((iteration + 1) % 1) === 0)) { //100
+        console.log("fitness at iteration", (iteration + 1), ": ", result[1]);
+    }
+    //print best
+    fit_func(result[0]); //tf.tidy(() => {return fit_func(result[0]);});
+    //solutions.dispose();
+
   }
+
 
   ask() {
     //returns a list of parameters
@@ -226,9 +242,9 @@ class PGPE{
       this.epsilon_full.dispose();
       this.solutions.dispose();
     }
-    this.epsilon = tf.keep(tf.randomNormal([this.batch_size, this.num_params], 0, 1, 'float32', this.seed).mul(this.sigma.reshape([1, this.num_params])));
+    this.epsilon = tf.randomNormal([this.batch_size, this.num_params], 0, 1, 'float32', this.seed).mul(this.sigma.reshape([1, this.num_params]));
     this.seed += 1;
-    this.epsilon_full = tf.keep(this.epsilon.concat(tf.neg(this.epsilon)));
+    this.epsilon_full = this.epsilon.concat(tf.neg(this.epsilon));
     if (this.average_baseline) {
       this.solutions = this.mu.reshape([1, this.num_params]).add(this.epsilon_full);
     }
@@ -280,10 +296,10 @@ class PGPE{
     if (this.first_iteration) {
         this.first_iteration = false;
         this.best_reward = this.curr_best_reward;
-        this.best_mu = best_mu;
+        this.best_mu = tf.keep(best_mu);
     } else {
         if ((this.forget_best || (this.curr_best_reward > this.best_reward))) {
-            this.best_mu = best_mu;
+            this.best_mu = tf.keep(best_mu);
             this.best_reward = this.curr_best_reward;
         }
     }
@@ -309,7 +325,7 @@ class PGPE{
         this.sigma = this.sigma.add(change_sigma);
     }
     if ((this.sigma_decay < 1)) {
-      this.sigma = this.sigma.mul(this.sigma_decay).where(this.sigma.greater(this.sigma_limit), this.sigma);
+      this.sigma = tf.keep(this.sigma.mul(this.sigma_decay).where(this.sigma.greater(this.sigma_limit), this.sigma));
     }
     if (((this.learning_rate_decay < 1) && (this.learning_rate > this.learning_rate_limit))) {
         this.learning_rate *= this.learning_rate_decay;
@@ -363,18 +379,6 @@ class PGPE{
     //return ((- weight_decay) * np.mean((model_param_grid * model_param_grid), {"axis": 1}));
   }
   
-  current_param() {
-      return this.curr_best_mu;
-  }
-
-  set_mu(mu) {
-      this.mu = np.array(mu);
-  }
-  
-  best_param() {
-      return this.best_mu;
-  }
-  
   result() {
       return [this.best_mu, this.best_reward, this.curr_best_reward, this.sigma];
   }
@@ -409,7 +413,7 @@ class TrianglesPainter{
     [h, w] = [this.h, this.w];
     alpha_scale = this.alpha_scale;
     coordinate_scale = this.coordinate_scale;
-    params = params.reshape([-1, 10]); //params = params.reshape(-1,10).copy();
+    params = params.reshape([-1, 10]);
     n_triangle = params.shape[0];
 
     // normalise data
@@ -425,7 +429,7 @@ class TrianglesPainter{
     const arr_a = this.normaliseSlice(params.slice([0, 9], [-1, 1]));
 
     if (canvas_background === "noise") {
-      // TODO - random RGB(255,255,255) per pixel
+      // TODO - random RGB(255,255,255) per pixel, preferably used with repeated evaluations to get average less affected by noise itself
     } else {
       if (canvas_background === "white") {
         background(255);;
