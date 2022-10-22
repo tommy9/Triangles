@@ -1,5 +1,6 @@
-*.png
+/*.png
 Debugging.xlsx
 .vscode/
 original/
 temp/
+Playfit variants/
