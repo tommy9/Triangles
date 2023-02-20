@@ -4,14 +4,18 @@ let triangles;
 let solver;
 let history;
 let iteration;
-const MAX_ITERATION = 1500; //1000;
+let startTime;
+const MAX_ITERATION = 20; //1000;
+const STOP_SCALING_AFTER = 1; //stop scaling all triangles to (varying) most extreme triangles to give stability
 const NSHAPES = 50;
-const NPOPULATION = 100; //100
+const NPOPULATION = 99 + 1; //100. The +1 is for the background colour, total needs to be even
 const IMG_SIZE = 200;
 const RAND_SEED = 999;
 let targetImg;
 let canvasPixels;
 let diffImg;
+let offscreenTriangles;
+let offscreenDiff;
 
 function preload() {
   targetImg = loadImage('assets/silly_cat.png');
@@ -19,6 +23,9 @@ function preload() {
 
 function setup() {
   createCanvas(IMG_SIZE * 3, IMG_SIZE);
+  offscreenTriangles = createGraphics(IMG_SIZE, IMG_SIZE);
+  offscreenTriangles.noStroke();
+  offscreenDiff = createGraphics(IMG_SIZE, IMG_SIZE);
   //colorMode(RGB);
   noStroke();
   randomSeed(RAND_SEED);
@@ -27,26 +34,14 @@ function setup() {
   history = [];
   iteration = 0;
   targetImg.loadPixels();
-  console.log('Init MB used: ' + tf.memory().numBytesInGPU/1024/1024 + ' for numTensors: ' + tf.memory().numTensors);
+  console.log(`Init used ${(tf.memory().numBytesInGPU/1024/1024).toFixed(3)}MB for ${tf.memory().numTensors} Tensors`);
 }
 
 function draw() {
-  let fitness_list, result, solutions;
   if (iteration < MAX_ITERATION) {
-      // solutions = tf.tidy(() => {return solver.ask();});
-      // fitness_list = [];
-      // for (let i = 0; i < solver.popsize; i += 1) {
-      //     fitness_list[i] = tf.tidy(() => {return fit_func(solutions.unstack()[i]);});
-      // }
-      // result = tf.tidy(() => {return solver.tell(fitness_list);});
-      console.log('Tell MB used: ' + tf.memory().numBytesInGPU/1024/1024 + ' for numTensors: ' + tf.memory().numTensors);
-      // history.push(result[1]);
-      // if ((((iteration + 1) % 1) === 0)) { //100
-      //     console.log("fitness at iteration", (iteration + 1), ": ", result[1]);
-      // }
-      // //print best
-      // tf.tidy(() => {return fit_func(result[0]);});
-      // solutions.dispose();
+      console.log(`Tell used ${(tf.memory().numBytesInGPU/1024/1024).toFixed(3)}MB for ${tf.memory().numTensors} Tensors`);
+
+      startTime = millis();
       tf.tidy(() => {return solver.iterate();});
       iteration += 1;
       if (iteration == MAX_ITERATION) {
@@ -57,14 +52,20 @@ function draw() {
   //console.log("fitness score at this local optimum:", result[1]);
 }
 
-function fit_func(params) {
-  triangles.render(params, "white");
-  canvasPixels = get(0,0,IMG_SIZE,IMG_SIZE);
-  diffImg = canvasPixels;
-  diffImg.blend(targetImg,0,0,IMG_SIZE,IMG_SIZE,0,0,IMG_SIZE,IMG_SIZE,DIFFERENCE);
-  image(diffImg, IMG_SIZE * 2, 0);
+function fit_func(params, show=false) {
+  triangles.render(params, "evolved");
+  diffImg = offscreenTriangles.get(0, 0, IMG_SIZE, IMG_SIZE);
   diffImg.loadPixels();
-  let l2loss = diffImg.pixels.filter((_,idx) => idx  % 4 != 3).reduce((a,b) => a + Math.pow(b/255,2), 0) / (IMG_SIZE * IMG_SIZE * 3);
+  let l2loss = 0;
+  for (let p=0; p<IMG_SIZE*4; p++){
+    if (p % 4 != 3) {
+      l2loss += Math.pow((targetImg.pixels[p] - diffImg.pixels[p])/255, 2);
+    }
+  }
+  if (show) {
+    image(offscreenTriangles, 0, 0);
+    image(targetImg, IMG_SIZE, 0);
+  }
   return 1 - l2loss; //pgpe maximises
 }
 
@@ -216,21 +217,22 @@ class PGPE{
 
   iterate() {
     let fitness_list, result, solutions;
-    solutions = solver.ask(); //tf.tidy(() => {return solver.ask();});
+    solutions = solver.ask();
     fitness_list = [];
     for (let i = 0; i < solver.popsize; i += 1) {
-        fitness_list[i] = fit_func(solutions.unstack()[i]); //tf.tidy(() => {return fit_func(solutions.unstack()[i]);});
+        fitness_list[i] = fit_func(solutions.unstack()[i]);
     }
-    result = solver.tell(fitness_list); //tf.tidy(() => {return solver.tell(fitness_list);});
+    result = solver.tell(fitness_list);
     //console.log('Tell MB used: ' + tf.memory().numBytesInGPU/1024/1024 + ' for numTensors: ' + tf.memory().numTensors);
     history.push(result[1]);
+    let endTime = millis();
+    let timeForIteration = endTime - startTime;
+    startTime = endTime;
     if ((((iteration + 1) % 1) === 0)) { //100
-        console.log("fitness at iteration", (iteration + 1), ": ", result[1]);
+        console.log(`fitness at iteration ${iteration + 1}: ${result[1].toFixed(8)} in ${timeForIteration.toFixed(0)}ms`);
     }
     //print best
-    fit_func(result[0]); //tf.tidy(() => {return fit_func(result[0]);});
-    //solutions.dispose();
-
+    fit_func(result[0], true);
   }
 
 
@@ -347,14 +349,8 @@ class PGPE{
     Note: This is different from scipy.stats.rankdata, which returns ranks in [1, len(x)].
     (https://github.com/openai/evolution-strategies-starter/blob/master/es_distributed/es.py)
     */
-    //let sorted = x.slice().sort(function(a,b){return b-a})
     let ranks = Array.from({length: x.length}, (_, i) => i);
-    //let ranks = x.map(function(v){ return sorted.indexOf(v)+1 });
     ranks.sort((a, b) => x.indexOf(a) - x.indexOf(b));
-    //var ranks;
-    //_pj._assert((x.ndim === 1), null);
-    //ranks = np.empty(x.length, {"dtype": "int"});
-    //ranks[x.argsort()] = np.arange(x.length);
     return ranks;
   }
 
@@ -369,14 +365,8 @@ class PGPE{
   }
 
   apply_weight_decay(x, weight_decay, model_param_list) {
-    // weight_decay = this.weight_decay = scalar (0.01)
-    // model_param_list = this.solutions = tensor1d
-    //let model_param_grid;
-    //console.log(model_param_list);
-    //model_param_grid = tf.tensor2d(model_param_list);
     let decay = model_param_list.mul(model_param_list).mean(1).mul(-weight_decay).arraySync();
     return x.map((a, i) => a + decay[i]);
-    //return ((- weight_decay) * np.mean((model_param_grid * model_param_grid), {"axis": 1}));
   }
   
   result() {
@@ -392,15 +382,24 @@ class TrianglesPainter{
     this.alpha_scale = alpha_scale;
     this.coordinate_scale = coordinate_scale;
     this.normalise = normalise;
+    this.minimums = [];
+    this.maximums = [];
   }
 
   get n_params() {
     return this.n_triangle * 10;
   }
 
-  normaliseSlice(slice) {
+  normaliseSlice(slice, use_frozen_scale=false, slice_index=0) {
     if (this.normalise) {
-      return slice.sub(slice.min()).div(slice.max().sub(slice.min())).flatten().arraySync();
+      if (use_frozen_scale)
+      {
+        return slice.sub(this.minimums[slice_index]).div(this.maximums[slice_index] - this.minimums[slice_index]).flatten().arraySync();
+      }
+      else
+      {
+        return slice.sub(slice.min()).div(slice.max().sub(slice.min())).flatten().arraySync();
+      }
     }
     else {
       return slice.add(0.5).flatten().arraySync();
@@ -417,30 +416,36 @@ class TrianglesPainter{
     n_triangle = params.shape[0];
 
     // normalise data
-    const arr_x0 = this.normaliseSlice(params.slice([0, 0], [-1, 1]));
-    const arr_y0 = this.normaliseSlice(params.slice([0, 1], [-1, 1]));
-    const arr_x1 = this.normaliseSlice(params.slice([0, 2], [-1, 1]));
-    const arr_y1 = this.normaliseSlice(params.slice([0, 3], [-1, 1]));
-    const arr_x2 = this.normaliseSlice(params.slice([0, 4], [-1, 1]));
-    const arr_y2 = this.normaliseSlice(params.slice([0, 5], [-1, 1]));
+    if (iteration == STOP_SCALING_AFTER) //TODO - not quite right, takes scale from last test case of this iteration rather than selected center?
+    {
+      this.minimums = params.min(0).arraySync()
+      this.maximums = params.max(0).arraySync()
+    }
+    const arr_x0 = this.normaliseSlice(params.slice([0, 0], [-1, 1]), iteration>STOP_SCALING_AFTER, 0);
+    const arr_y0 = this.normaliseSlice(params.slice([0, 1], [-1, 1]), iteration>STOP_SCALING_AFTER, 1);
+    const arr_x1 = this.normaliseSlice(params.slice([0, 2], [-1, 1]), iteration>STOP_SCALING_AFTER, 2);
+    const arr_y1 = this.normaliseSlice(params.slice([0, 3], [-1, 1]), iteration>STOP_SCALING_AFTER, 3);
+    const arr_x2 = this.normaliseSlice(params.slice([0, 4], [-1, 1]), iteration>STOP_SCALING_AFTER, 4);
+    const arr_y2 = this.normaliseSlice(params.slice([0, 5], [-1, 1]), iteration>STOP_SCALING_AFTER, 5);
     const arr_r = this.normaliseSlice(params.slice([0, 6], [-1, 1]));
     const arr_g = this.normaliseSlice(params.slice([0, 7], [-1, 1]));
     const arr_b = this.normaliseSlice(params.slice([0, 8], [-1, 1]));
     const arr_a = this.normaliseSlice(params.slice([0, 9], [-1, 1]));
 
-    if (canvas_background === "noise") {
-      // TODO - random RGB(255,255,255) per pixel, preferably used with repeated evaluations to get average less affected by noise itself
+      // TODO - set "noise" to random RGB(255,255,255) per pixel, preferably used with repeated evaluations to get average less affected by noise itself
+    if (canvas_background === "evolved") {
+      offscreenTriangles.background([Number.parseInt(arr_r[0] * 255), Number.parseInt(arr_g[0] * 255), Number.parseInt(arr_b[0] * 255)])
     } else {
       if (canvas_background === "white") {
-        background(255);;
+        offscreenTriangles.background(255);;
       } else {
         if (canvas_background === "black") {
-          background(0);
+          offscreenTriangles.background(0);
         }
       }
     }
 
-    for (let i = 0; i < n_triangle; i += 1) {
+    for (let i = 1; i < n_triangle; i += 1) {
       x0 = arr_x0[i];
       y0 = arr_y0[i];
       x1 = arr_x1[i];
@@ -452,15 +457,15 @@ class TrianglesPainter{
       b = arr_b[i];
       a = arr_a[i];
       [xc, yc] = [(x0 + x1 + x2) / 3.0, (y0 + y1 + y2) / 3.0];
-      [x0, y0] = [xc + (x0 - xc) * coordinate_scale, yc + (y0 - yc) * coordinate_scale];
-      [x1, y1] = [xc + (x1 - xc) * coordinate_scale, yc + (y1 - yc) * coordinate_scale];
-      [x2, y2] = [xc + (x2 - xc) * coordinate_scale, yc + (y2 - yc) * coordinate_scale];
+      // [x0, y0] = [xc + (x0 - xc) * coordinate_scale, yc + (y0 - yc) * coordinate_scale];
+      // [x1, y1] = [xc + (x1 - xc) * coordinate_scale, yc + (y1 - yc) * coordinate_scale];
+      // [x2, y2] = [xc + (x2 - xc) * coordinate_scale, yc + (y2 - yc) * coordinate_scale];
       [x0, x1, x2] = [Number.parseInt(x0 * w), Number.parseInt(x1 * w), Number.parseInt(x2 * w)];
       [y0, y1, y2] = [Number.parseInt(y0 * h), Number.parseInt(y1 * h), Number.parseInt(y2 * h)];
       [r, g, b, a] = [Number.parseInt(r * 255), Number.parseInt(g * 255), Number.parseInt(b * 255), Number.parseInt(a * alpha_scale * 255)];
 
-      fill(r, g, b, a);
-      triangle(x0, y0, x1, y1, x2, y2);
+      offscreenTriangles.fill(r, g, b, a);
+      offscreenTriangles.triangle(x0, y0, x1, y1, x2, y2);
     }
   }
 
