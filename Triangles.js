@@ -219,9 +219,10 @@ class PGPE{
   iterate() {
     let fitness_list, result, solutions;
     solutions = solver.ask();
+    //debugger;
     fitness_list = [];
     for (let i = 0; i < solver.popsize; i += 1) {
-        fitness_list[i] = fit_func(solutions.unstack()[i]);
+        fitness_list[i] = fit_func(solutions.slice([i, 0], [1, -1]));
     }
     result = solver.tell(fitness_list);
     //console.log('Tell MB used: ' + tf.memory().numBytesInGPU/1024/1024 + ' for numTensors: ' + tf.memory().numTensors);
@@ -382,8 +383,10 @@ class TrianglesPainter{
     this.n_triangle = n_triangle;
     this.alpha_scale = alpha_scale;
     this.normalise = normalise;
-    this.minimums = [];
-    this.maximums = [];
+    this.minimums;
+    this.maximums;
+    this.frozenMinimums;
+    this.frozenMaximums;
   }
 
   get n_params() {
@@ -394,11 +397,11 @@ class TrianglesPainter{
     if (this.normalise) {
       if (use_frozen_scale)
       {
-        return slice.sub(this.minimums[slice_index]).div(this.maximums[slice_index] - this.minimums[slice_index]).mul(specificScalar).floor().flatten().arraySync();
+        return slice.sub(this.frozenMinimums[slice_index]).div((this.frozenMaximums[slice_index] - this.frozenMinimums[slice_index]) / specificScalar).floor().flatten().arraySync();
       }
       else
       {
-        return slice.sub(slice.min()).div(slice.max().sub(slice.min())).mul(specificScalar).floor().flatten().arraySync();
+        return slice.sub(this.minimums[slice_index]).div((this.maximums[slice_index] - this.minimums[slice_index]) / specificScalar).floor().flatten().arraySync();
       }
     }
     else {
@@ -415,10 +418,12 @@ class TrianglesPainter{
     n_triangle = params.shape[0];
 
     // normalise data
+    this.minimums = params.min(0).arraySync();
+    this.maximums = params.max(0).arraySync();
     if (iteration == STOP_SCALING_AFTER) //TODO - not quite right, takes scale from last test case of this iteration rather than selected center?
     {
-      this.minimums = params.min(0).arraySync()
-      this.maximums = params.max(0).arraySync()
+      this.frozenMinimums = this.minimums;
+      this.frozenMaximums = this.maximums;
     }
     const arr_x0 = this.normaliseSlice(params.slice([0, 0], [-1, 1]), w, iteration>STOP_SCALING_AFTER, 0);
     const arr_y0 = this.normaliseSlice(params.slice([0, 1], [-1, 1]), h, iteration>STOP_SCALING_AFTER, 1);
