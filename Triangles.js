@@ -5,8 +5,8 @@ let solver;
 let history;
 let iteration;
 let startTime;
-const MAX_ITERATION = 20; //1000;
-const STOP_SCALING_AFTER = 1; //stop scaling all triangles to (varying) most extreme triangles to give stability
+const MAX_ITERATION = 1500; //1000;
+const STOP_SCALING_AFTER = 200; //stop scaling all triangles to (varying) most extreme triangles to give stability
 const NSHAPES = 50;
 const NPOPULATION = 99 + 1; //100. The +1 is for the background colour, total needs to be even
 const IMG_SIZE = 200;
@@ -376,12 +376,11 @@ class PGPE{
 }
 
 class TrianglesPainter{
-  constructor(h, w, n_triangle = 10, alpha_scale = 0.1, coordinate_scale = 1.0, normalise=true) {
+  constructor(h, w, n_triangle = 10, alpha_scale = 0.1, normalise=true) {
     this.h = h;
     this.w = w;
     this.n_triangle = n_triangle;
     this.alpha_scale = alpha_scale;
-    this.coordinate_scale = coordinate_scale;
     this.normalise = normalise;
     this.minimums = [];
     this.maximums = [];
@@ -391,28 +390,27 @@ class TrianglesPainter{
     return this.n_triangle * 10;
   }
 
-  normaliseSlice(slice, use_frozen_scale=false, slice_index=0) {
+  normaliseSlice(slice, specificScalar, use_frozen_scale=false, slice_index=0) {
     if (this.normalise) {
       if (use_frozen_scale)
       {
-        return slice.sub(this.minimums[slice_index]).div(this.maximums[slice_index] - this.minimums[slice_index]).flatten().arraySync();
+        return slice.sub(this.minimums[slice_index]).div(this.maximums[slice_index] - this.minimums[slice_index]).mul(specificScalar).floor().flatten().arraySync();
       }
       else
       {
-        return slice.sub(slice.min()).div(slice.max().sub(slice.min())).flatten().arraySync();
+        return slice.sub(slice.min()).div(slice.max().sub(slice.min())).mul(specificScalar).floor().flatten().arraySync();
       }
     }
     else {
-      return slice.add(0.5).flatten().arraySync();
+      return slice.add(0.5).flatten().arraySync();  //NOT IMPLEMENTED ALL FEATURES - MAYBE DELETE?
     }
   }
 
 
   render(params, canvas_background = "noise") {
-    let a, alpha_scale, b, coordinate_scale, g, h, n_triangle, r, w, x0, x1, x2, xc, y0, y1, y2, yc;
+    let a, alpha_scale, b, g, h, n_triangle, r, w, x0, x1, x2, y0, y1, y2;
     [h, w] = [this.h, this.w];
     alpha_scale = this.alpha_scale;
-    coordinate_scale = this.coordinate_scale;
     params = params.reshape([-1, 10]);
     n_triangle = params.shape[0];
 
@@ -422,20 +420,20 @@ class TrianglesPainter{
       this.minimums = params.min(0).arraySync()
       this.maximums = params.max(0).arraySync()
     }
-    const arr_x0 = this.normaliseSlice(params.slice([0, 0], [-1, 1]), iteration>STOP_SCALING_AFTER, 0);
-    const arr_y0 = this.normaliseSlice(params.slice([0, 1], [-1, 1]), iteration>STOP_SCALING_AFTER, 1);
-    const arr_x1 = this.normaliseSlice(params.slice([0, 2], [-1, 1]), iteration>STOP_SCALING_AFTER, 2);
-    const arr_y1 = this.normaliseSlice(params.slice([0, 3], [-1, 1]), iteration>STOP_SCALING_AFTER, 3);
-    const arr_x2 = this.normaliseSlice(params.slice([0, 4], [-1, 1]), iteration>STOP_SCALING_AFTER, 4);
-    const arr_y2 = this.normaliseSlice(params.slice([0, 5], [-1, 1]), iteration>STOP_SCALING_AFTER, 5);
-    const arr_r = this.normaliseSlice(params.slice([0, 6], [-1, 1]));
-    const arr_g = this.normaliseSlice(params.slice([0, 7], [-1, 1]));
-    const arr_b = this.normaliseSlice(params.slice([0, 8], [-1, 1]));
-    const arr_a = this.normaliseSlice(params.slice([0, 9], [-1, 1]));
+    const arr_x0 = this.normaliseSlice(params.slice([0, 0], [-1, 1]), w, iteration>STOP_SCALING_AFTER, 0);
+    const arr_y0 = this.normaliseSlice(params.slice([0, 1], [-1, 1]), h, iteration>STOP_SCALING_AFTER, 1);
+    const arr_x1 = this.normaliseSlice(params.slice([0, 2], [-1, 1]), w, iteration>STOP_SCALING_AFTER, 2);
+    const arr_y1 = this.normaliseSlice(params.slice([0, 3], [-1, 1]), h, iteration>STOP_SCALING_AFTER, 3);
+    const arr_x2 = this.normaliseSlice(params.slice([0, 4], [-1, 1]), w, iteration>STOP_SCALING_AFTER, 4);
+    const arr_y2 = this.normaliseSlice(params.slice([0, 5], [-1, 1]), h, iteration>STOP_SCALING_AFTER, 5);
+    const arr_r = this.normaliseSlice(params.slice([0, 6], [-1, 1]), 255.99);
+    const arr_g = this.normaliseSlice(params.slice([0, 7], [-1, 1]), 255.99);
+    const arr_b = this.normaliseSlice(params.slice([0, 8], [-1, 1]), 255.99);
+    const arr_a = this.normaliseSlice(params.slice([0, 9], [-1, 1]), 255.99 * alpha_scale);
 
       // TODO - set "noise" to random RGB(255,255,255) per pixel, preferably used with repeated evaluations to get average less affected by noise itself
     if (canvas_background === "evolved") {
-      offscreenTriangles.background([Number.parseInt(arr_r[0] * 255), Number.parseInt(arr_g[0] * 255), Number.parseInt(arr_b[0] * 255)])
+      offscreenTriangles.background([arr_r[0], arr_g[0], arr_b[0]])
     } else {
       if (canvas_background === "white") {
         offscreenTriangles.background(255);;
@@ -457,13 +455,6 @@ class TrianglesPainter{
       g = arr_g[i];
       b = arr_b[i];
       a = arr_a[i];
-      [xc, yc] = [(x0 + x1 + x2) / 3.0, (y0 + y1 + y2) / 3.0];
-      // [x0, y0] = [xc + (x0 - xc) * coordinate_scale, yc + (y0 - yc) * coordinate_scale];
-      // [x1, y1] = [xc + (x1 - xc) * coordinate_scale, yc + (y1 - yc) * coordinate_scale];
-      // [x2, y2] = [xc + (x2 - xc) * coordinate_scale, yc + (y2 - yc) * coordinate_scale];
-      [x0, x1, x2] = [Number.parseInt(x0 * w), Number.parseInt(x1 * w), Number.parseInt(x2 * w)];
-      [y0, y1, y2] = [Number.parseInt(y0 * h), Number.parseInt(y1 * h), Number.parseInt(y2 * h)];
-      [r, g, b, a] = [Number.parseInt(r * 255), Number.parseInt(g * 255), Number.parseInt(b * 255), Number.parseInt(a * alpha_scale * 255)];
 
       offscreenTriangles.fill(r, g, b, a);
       offscreenTriangles.triangle(x0, y0, x1, y1, x2, y2);
