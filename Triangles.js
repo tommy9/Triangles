@@ -12,6 +12,7 @@ const NPOPULATION = 99 + 1; //100. The +1 is for the background colour, total ne
 const IMG_SIZE = 200;
 const RAND_SEED = 999;
 let targetImg;
+let targetPixels;
 let canvasPixels;
 let diffImg;
 let offscreenTriangles;
@@ -22,6 +23,7 @@ function preload() {
 }
 
 function setup() {
+  pixelDensity(1);
   createCanvas(IMG_SIZE * 3, IMG_SIZE);
   offscreenTriangles = createGraphics(IMG_SIZE, IMG_SIZE);
   offscreenTriangles.noStroke();
@@ -34,6 +36,7 @@ function setup() {
   history = [];
   iteration = 0;
   targetImg.loadPixels();
+  targetPixels = tf.browser.fromPixels(targetImg.canvas).flatten();
   console.log(`Init used ${(tf.memory().numBytesInGPU/1024/1024).toFixed(3)}MB for ${tf.memory().numTensors} Tensors`);
 }
 
@@ -53,15 +56,13 @@ function draw() {
 }
 
 function fit_func(params, show=false) {
+  //debugger;
   triangles.render(params, "evolved");
-  diffImg = offscreenTriangles.get(0, 0, IMG_SIZE, IMG_SIZE);
-  diffImg.loadPixels();
+  diffImg = tf.browser.fromPixels(offscreenTriangles.canvas).flatten();
+
   let l2loss = 0;
-  for (let p=0; p<IMG_SIZE*4; p++){
-    if (p % 4 != 3) {
-      l2loss += Math.pow((targetImg.pixels[p] - diffImg.pixels[p])/255, 2);
-    }
-  }
+  l2loss = tf.squaredDifference(targetPixels, diffImg).sum().arraySync();
+  l2loss /= 255 * 255 * IMG_SIZE * IMG_SIZE * 3;
   if (show) {
     image(offscreenTriangles, 0, 0);
     image(targetImg, IMG_SIZE, 0);
