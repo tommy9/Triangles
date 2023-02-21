@@ -30,7 +30,7 @@ function setup() {
   offscreenDiff = createGraphics(IMG_SIZE, IMG_SIZE);
   //colorMode(RGB);
   noStroke();
-  randomSeed(RAND_SEED);
+  //randomSeed(RAND_SEED); //For debugging
   triangles = new TrianglesPainter(IMG_SIZE, IMG_SIZE, NSHAPES, 0.5, 1.0, true);
   solver = new PGPE(triangles.n_params);
   history = [];
@@ -43,10 +43,12 @@ function setup() {
 function draw() {
   if (iteration < MAX_ITERATION) {
       console.log(`Tell used ${(tf.memory().numBytesInGPU/1024/1024).toFixed(3)}MB for ${tf.memory().numTensors} Tensors`);
-
+      background(255);
       startTime = millis();
       tf.tidy(() => {return solver.iterate();});
       iteration += 1;
+      fill(0);
+      text("Iteration " + iteration + " of " + MAX_ITERATION, IMG_SIZE * 2 + 10, 10);
       if (iteration == MAX_ITERATION) {
         saveCanvas('final image', 'png');
       }
