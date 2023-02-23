@@ -16,21 +16,21 @@ let targetPixels;
 let canvasPixels;
 let diffImg;
 let offscreenTriangles;
-let loadedFont;
+let offscreenStatus;
 
 function preload() {
   targetImg = loadImage('assets/silly_cat.png');
-  loadedFont = loadFont("assets/Arial.ttf");
 }
 
 function setup() {
   pixelDensity(1);
   createCanvas(IMG_SIZE * 3, IMG_SIZE, WEBGL);
-  ortho(0, IMG_SIZE * 3, 0, -IMG_SIZE, 0, NPOPULATION * 2); //Not sure why need z axis related to number of triangles by this factor, just from experimenting
+  ortho(0, IMG_SIZE * 3, -IMG_SIZE, 0, 0, NPOPULATION * 2); //Not sure why need z axis related to number of triangles by this factor, just from experimenting
   offscreenTriangles = createGraphics(IMG_SIZE, IMG_SIZE, WEBGL);
   offscreenTriangles.noStroke();
-  offscreenTriangles.ortho(0, IMG_SIZE, 0, -IMG_SIZE, 0, 200);
-  textFont(loadedFont);
+  offscreenTriangles.ortho(0, IMG_SIZE, -IMG_SIZE, 0, 0, 200);
+  offscreenStatus = createGraphics(IMG_SIZE, IMG_SIZE);
+  offscreenStatus.textSize(16);
   noStroke();
   //randomSeed(RAND_SEED); //For debugging
   triangles = new TrianglesPainter(IMG_SIZE, IMG_SIZE, NSHAPES, 0.5, 1.0, true);
@@ -45,12 +45,12 @@ function setup() {
 function draw() {
   if (iteration < MAX_ITERATION) {
       console.log(`Tell used ${(tf.memory().numBytesInGPU/1024/1024).toFixed(3)}MB for ${tf.memory().numTensors} Tensors`);
-      background(255);
       startTime = millis();
       tf.tidy(() => {return solver.iterate();});
       iteration += 1;
       fill(0);
-      text("Iteration " + iteration + " of " + MAX_ITERATION, IMG_SIZE * 2 + 10, 10);
+      offscreenStatus.background(255);
+      offscreenStatus.text("Iteration " + iteration + " of " + MAX_ITERATION, 10, 30);
       if (iteration == MAX_ITERATION) {
         saveCanvas('final image', 'png');
       }
@@ -68,6 +68,7 @@ function fit_func(params, show=false) {
   if (show) {
     image(offscreenTriangles, 0, 0);
     image(targetImg, IMG_SIZE, 0);
+    image(offscreenStatus, IMG_SIZE * 2, 0);
   }
   return 1 - l2loss; //pgpe maximises
 }
