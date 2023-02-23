@@ -16,19 +16,21 @@ let targetPixels;
 let canvasPixels;
 let diffImg;
 let offscreenTriangles;
-let offscreenDiff;
+let loadedFont;
 
 function preload() {
   targetImg = loadImage('assets/silly_cat.png');
+  loadedFont = loadFont("assets/Arial.ttf");
 }
 
 function setup() {
   pixelDensity(1);
-  createCanvas(IMG_SIZE * 3, IMG_SIZE);
-  offscreenTriangles = createGraphics(IMG_SIZE, IMG_SIZE);
+  createCanvas(IMG_SIZE * 3, IMG_SIZE, WEBGL);
+  ortho(0, IMG_SIZE * 3, 0, -IMG_SIZE, 0, NPOPULATION * 2); //Not sure why need z axis related to number of triangles by this factor, just from experimenting
+  offscreenTriangles = createGraphics(IMG_SIZE, IMG_SIZE, WEBGL);
   offscreenTriangles.noStroke();
-  offscreenDiff = createGraphics(IMG_SIZE, IMG_SIZE);
-  //colorMode(RGB);
+  offscreenTriangles.ortho(0, IMG_SIZE, 0, -IMG_SIZE, 0, 200);
+  textFont(loadedFont);
   noStroke();
   //randomSeed(RAND_SEED); //For debugging
   triangles = new TrianglesPainter(IMG_SIZE, IMG_SIZE, NSHAPES, 0.5, 1.0, true);
@@ -53,8 +55,6 @@ function draw() {
         saveCanvas('final image', 'png');
       }
   }
-  //console.log("local optimum discovered by solver:\n", result[0]);
-  //console.log("fitness score at this local optimum:", result[1]);
 }
 
 function fit_func(params, show=false) {
