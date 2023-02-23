@@ -63,8 +63,8 @@ function fit_func(params, show=false) {
   diffImg = tf.browser.fromPixels(offscreenTriangles.canvas).flatten();
 
   let l2loss = 0;
-  l2loss = tf.squaredDifference(targetPixels, diffImg).sum().arraySync();
-  l2loss /= 255 * 255 * IMG_SIZE * IMG_SIZE * 3;
+  l2loss = tf.squaredDifference(targetPixels, diffImg).mean().arraySync();
+  l2loss /= 255 * 255;
   if (show) {
     image(offscreenTriangles, 0, 0);
     image(targetImg, IMG_SIZE, 0);
