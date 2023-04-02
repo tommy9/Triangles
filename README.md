@@ -2,4 +2,7 @@
 
 Based on the bitmap reproduction part of https://es-clip.github.io/ translated to JavaScript / P5.js / TensorFlow.js. 
 
-Hardcode parameters including source file currently. Needs optimisation (use WEBGL context in P5.js?) and ability to modify parameters and inputs from the web view.
+Improvements:
+
+- Needs optimisation (framebuffer? Not sure how to get pixels into TensorFlow)
+- Additional fields for setting number of triangles and population size (currently hardcoded)
