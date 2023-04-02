@@ -7,6 +7,19 @@
   <script language="javascript" type="text/javascript" src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.2.0/dist/tf.min.js"></script>
   <script language="javascript" type="text/javascript" src="https://cdn.jsdelivr.net/npm/p5@1.5.0/lib/p5.js"></script>
   <script language="javascript" type="text/javascript" src="Triangles.js"></script>
+  <!-- Input box for number of iterations to run -->
+  <input type="number" id="iterations" name="iterations" min="1" max="10000" value="100">
+  <!-- Start/stop button -->
+  <button id="startStop" onclick="startStop()">Start</button>
+  <!-- Drop down list of images -->
+  <select id="imageName" onchange="changeImage()">
+    <option value="darwin.png">Darwin</option>
+    <option value="rubberduck.png">RubberduckVBA</option>
+    <option value="impressionism.png">Impressionism</option>
+    <option value="landscape.png">Landscape</option>
+    <option value="monalisa.png">Monalisa</option>
+    <option value="silly_cat.png">Cat</option>
+  </select>
 
   <!-- This line removes any default padding and style.
        You might only need one of these values set. -->

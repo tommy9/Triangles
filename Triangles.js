@@ -3,11 +3,10 @@
 let triangles;
 let solver;
 let history;
-let iteration;
+let iteration = 0;
 let startTime;
-const MAX_ITERATION = 1500; //1000;
-const STOP_SCALING_AFTER = 200; //stop scaling all triangles to (varying) most extreme triangles to give stability
-const NSHAPES = 50;
+const STOP_SCALING_AFTER = 500; //stop scaling all triangles to (varying) most extreme triangles to give stability
+const NSHAPES = 100;
 const NPOPULATION = 99 + 1; //100. The +1 is for the background colour, total needs to be even
 const IMG_SIZE = 200;
 const RAND_SEED = 999;
@@ -17,10 +16,8 @@ let canvasPixels;
 let diffImg;
 let offscreenTriangles;
 let offscreenStatus;
-
-function preload() {
-  targetImg = loadImage('assets/silly_cat.png');
-}
+let max_iterations;
+let running = false;
 
 function setup() {
   pixelDensity(1);
@@ -36,22 +33,38 @@ function setup() {
   triangles = new TrianglesPainter(IMG_SIZE, IMG_SIZE, NSHAPES, 0.5, 1.0, true);
   solver = new PGPE(triangles.n_params);
   history = [];
-  iteration = 0;
-  targetImg.loadPixels();
-  targetPixels = tf.browser.fromPixels(targetImg.canvas).flatten();
   console.log(`Init used ${(tf.memory().numBytesInGPU/1024/1024).toFixed(3)}MB for ${tf.memory().numTensors} Tensors`);
+  max_iterations = document.getElementById("iterations").value;
+}
+
+function startStop() {
+  running = !running;
+  if (running) {
+    document.getElementById("startStop").innerHTML = "Stop";
+    iteration = 0;
+  } else {
+    document.getElementById("startStop").innerHTML = "Start";
+  }
+}
+
+function changeImage() {
+  let img = document.getElementById("imageName").value;
+  targetImg = loadImage('assets/' + img);
+  targetImg.loadPixels();
+  targetPixels = tf.browser.fromPixels(targetImg.canvas);
+  console.log(`Changed image to ${img}`);
 }
 
 function draw() {
-  if (iteration < MAX_ITERATION) {
+  if (running & iteration < max_iterations) {
       console.log(`Tell used ${(tf.memory().numBytesInGPU/1024/1024).toFixed(3)}MB for ${tf.memory().numTensors} Tensors`);
       startTime = millis();
       tf.tidy(() => {return solver.iterate();});
       iteration += 1;
       fill(0);
       offscreenStatus.background(255);
-      offscreenStatus.text("Iteration " + iteration + " of " + MAX_ITERATION, 10, 30);
-      if (iteration == MAX_ITERATION) {
+      offscreenStatus.text("Iteration " + iteration + " of " + max_iterations, 10, 30);
+      if (iteration == max_iterations) {
         saveCanvas('final image', 'png');
       }
   }
@@ -60,7 +73,7 @@ function draw() {
 function fit_func(params, show=false) {
   //debugger;
   triangles.render(params, "evolved");
-  diffImg = tf.browser.fromPixels(offscreenTriangles.canvas).flatten();
+  diffImg = tf.browser.fromPixels(offscreenTriangles.canvas);
 
   let l2loss = 0;
   l2loss = tf.squaredDifference(targetPixels, diffImg).mean().arraySync();
