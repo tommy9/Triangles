@@ -19,6 +19,10 @@ let offscreenStatus;
 let max_iterations;
 let running = false;
 
+function preload() {
+  changeImage();
+}
+
 function setup() {
   pixelDensity(1);
   createCanvas(IMG_SIZE * 3, IMG_SIZE, WEBGL);
@@ -45,13 +49,13 @@ function startStop() {
   } else {
     document.getElementById("startStop").innerHTML = "Start";
   }
+  targetPixels = tf.browser.fromPixels(targetImg.canvas);
 }
 
 function changeImage() {
   let img = document.getElementById("imageName").value;
   targetImg = loadImage('assets/' + img);
   targetImg.loadPixels();
-  targetPixels = tf.browser.fromPixels(targetImg.canvas);
   console.log(`Changed image to ${img}`);
 }
 
