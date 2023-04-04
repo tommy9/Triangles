@@ -38,7 +38,6 @@ function setup() {
   solver = new PGPE(triangles.n_params);
   history = [];
   console.log(`Init used ${(tf.memory().numBytesInGPU/1024/1024).toFixed(3)}MB for ${tf.memory().numTensors} Tensors`);
-  max_iterations = document.getElementById("iterations").value;
 }
 
 function startStop() {
@@ -50,6 +49,7 @@ function startStop() {
     document.getElementById("startStop").innerHTML = "Start";
   }
   targetPixels = tf.browser.fromPixels(targetImg.canvas);
+  max_iterations = document.getElementById("iterations").value;
 }
 
 function changeImage() {
